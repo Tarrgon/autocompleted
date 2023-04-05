@@ -161,11 +161,9 @@ async fn autocomplete(data: web::Data<AutocompleteState>, req: web::Query<Req>) 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     use actix_web::{App, HttpServer};
-    use dotenv::dotenv;
     use tokio_postgres::NoTls;
     use moka::future::CacheBuilder;
     use std::time::Duration;
-    dotenv().ok();
     env_logger::init();
 
     let config = crate::config::Config::from_env().unwrap();
