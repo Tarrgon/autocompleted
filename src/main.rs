@@ -1,8 +1,10 @@
-use actix_web::{dev::HttpResponseBuilder, error, get, http::header, http::StatusCode, HttpResponse, web};
+use actix_web::{
+    dev::HttpResponseBuilder, error, get, http::header, http::StatusCode, web, HttpResponse,
+};
 use deadpool_postgres::Pool;
 use derive_more::{Display, Error, From};
-use moka::future::Cache;
 use log::error;
+use moka::future::Cache;
 use serde::Deserialize;
 
 mod config {
@@ -46,18 +48,27 @@ mod db {
     use crate::models::Tag;
 
     fn escape_like(stuff: &String) -> String {
-        stuff.replace("%", "\\%").replace("_", "\\_").replace("*", "%").replace("\\*", "*")
+        stuff
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+            .replace("*", "%")
+            .replace("\\*", "*")
     }
 
-    pub async fn get_tags(client: &Client, tag_prefix: &String) -> Result<Vec<Tag>, tokio_postgres::Error> {
+    pub async fn get_tags(
+        client: &Client,
+        tag_prefix: &String,
+    ) -> Result<Vec<Tag>, tokio_postgres::Error> {
         let escape_prefix = escape_like(&(tag_prefix.to_owned() + "*"));
         let _stmt = "set statement_timeout = 3000";
         let stmt = client.prepare(&_stmt).await?;
         client.execute(&stmt, &[]).await?;
         let _stmt = include_str!("../sql/fetch_tags_a.sql");
         let stmt = client.prepare(&_stmt).await?;
-        let rows = client.query(&stmt, &[&escape_prefix])
-            .await?.iter()
+        let rows = client
+            .query(&stmt, &[&escape_prefix])
+            .await?
+            .iter()
             .map(|row| Tag::from_row_ref(row).unwrap())
             .collect::<Vec<Tag>>();
         if rows.len() > 0 {
@@ -65,8 +76,10 @@ mod db {
         }
         let _stmt = include_str!("../sql/fetch_tags_b.sql");
         let stmt = client.prepare(&_stmt).await?;
-        let rows = client.query(&stmt, &[&tag_prefix])
-            .await?.iter()
+        let rows = client
+            .query(&stmt, &[&tag_prefix])
+            .await?
+            .iter()
             .map(|row| Tag::from_row_ref(row).unwrap())
             .collect::<Vec<Tag>>();
         Ok(rows)
@@ -91,17 +104,19 @@ impl error::ResponseError for AutocompleteError {
         match *self {
             AutocompleteError::BadRequest => HttpResponseBuilder::new(self.status_code())
                 .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-                .set_header(header::CACHE_CONTROL, "private; max-age=0").body("{\"error\":\"bad request\"}"),
+                .set_header(header::CACHE_CONTROL, "private; max-age=0")
+                .body("{\"error\":\"bad request\"}"),
             AutocompleteError::ServerError => HttpResponseBuilder::new(self.status_code())
                 .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-                .set_header(header::CACHE_CONTROL, "private; max-age=0").body("{\"error\":\"internal error\"}")
+                .set_header(header::CACHE_CONTROL, "private; max-age=0")
+                .body("{\"error\":\"internal error\"}"),
         }
     }
 
     fn status_code(&self) -> StatusCode {
         match *self {
             AutocompleteError::BadRequest => StatusCode::BAD_REQUEST,
-            AutocompleteError::ServerError => StatusCode::INTERNAL_SERVER_ERROR
+            AutocompleteError::ServerError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -114,18 +129,29 @@ fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
     if tag.len() < 3 {
         return Err(AutocompleteError::BadRequest);
     }
-    let tag_str = tag.nfc().collect::<String>().to_lowercase().replace("*", "").replace("%", "").chars().filter(|x| !x.is_whitespace()).collect();
+    let tag_str = tag
+        .nfc()
+        .collect::<String>()
+        .to_lowercase()
+        .replace("*", "")
+        .replace("%", "")
+        .chars()
+        .filter(|x| !x.is_whitespace())
+        .collect();
     Ok(tag_str)
 }
 
 #[derive(Deserialize)]
 struct Req {
-  #[serde(rename(deserialize = "search[name_matches]"))]
-  tag_prefix: String
+    #[serde(rename(deserialize = "search[name_matches]"))]
+    tag_prefix: String,
 }
 
 #[get("/")]
-async fn autocomplete(data: web::Data<AutocompleteState>, req: web::Query<Req>) -> Result<HttpResponse, AutocompleteError> {
+async fn autocomplete(
+    data: web::Data<AutocompleteState>,
+    req: web::Query<Req>,
+) -> Result<HttpResponse, AutocompleteError> {
     let prefix: String = validate_transform_tag(req.tag_prefix.as_str())?;
     let cached = data.cache.get(&prefix);
     return if cached.is_some() {
@@ -161,9 +187,9 @@ async fn autocomplete(data: web::Data<AutocompleteState>, req: web::Query<Req>) 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     use actix_web::{App, HttpServer};
-    use tokio_postgres::NoTls;
     use moka::future::CacheBuilder;
     use std::time::Duration;
+    use tokio_postgres::NoTls;
     env_logger::init();
 
     let config = crate::config::Config::from_env().unwrap();
@@ -179,6 +205,8 @@ async fn main() -> std::io::Result<()> {
                 cache: cache.clone(),
             })
             .service(autocomplete)
-    }).bind(config.server_addr.clone())?
-        .run().await
+    })
+    .bind(config.server_addr.clone())?
+    .run()
+    .await
 }
