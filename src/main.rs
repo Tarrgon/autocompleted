@@ -1,7 +1,11 @@
 use actix_web::{
-    dev::HttpResponseBuilder, error, get, http::header, http::StatusCode, web, HttpResponse,
+    error, get,
+    http::header,
+    http::StatusCode,
+    web::{self, Data},
+    HttpResponse, HttpResponseBuilder,
 };
-use deadpool_postgres::Pool;
+use deadpool_postgres::{Pool, Runtime};
 use derive_more::{Display, Error, From};
 use log::error;
 use moka::future::Cache;
@@ -18,10 +22,11 @@ mod config {
     }
 
     impl Config {
-        pub fn from_env() -> Result<Self, ConfigError> {
-            let mut cfg = ::config::Config::new();
-            cfg.merge(::config::Environment::new())?;
-            cfg.try_into()
+        pub fn from_env() -> Result<Self, config::ConfigError> {
+            config::Config::builder()
+                .add_source(config::Environment::default().separator("__"))
+                .build()?
+                .try_deserialize()
         }
     }
 }
@@ -103,12 +108,12 @@ impl error::ResponseError for AutocompleteError {
     fn error_response(&self) -> HttpResponse {
         match *self {
             AutocompleteError::BadRequest => HttpResponseBuilder::new(self.status_code())
-                .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-                .set_header(header::CACHE_CONTROL, "private; max-age=0")
+                .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
+                .insert_header((header::CACHE_CONTROL, "private; max-age=0"))
                 .body("{\"error\":\"bad request\"}"),
             AutocompleteError::ServerError => HttpResponseBuilder::new(self.status_code())
-                .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-                .set_header(header::CACHE_CONTROL, "private; max-age=0")
+                .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
+                .insert_header((header::CACHE_CONTROL, "private; max-age=0"))
                 .body("{\"error\":\"internal error\"}"),
         }
     }
@@ -156,8 +161,8 @@ async fn autocomplete(
     let cached = data.cache.get(&prefix);
     return if cached.is_some() {
         Ok(HttpResponse::Ok()
-            .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-            .set_header(header::CACHE_CONTROL, "public; max-age=604800")
+            .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
+            .insert_header((header::CACHE_CONTROL, "public; max-age=604800"))
             .body(cached.unwrap()))
     } else {
         let client = match data.pool.get().await {
@@ -178,8 +183,8 @@ async fn autocomplete(
         let serialized_copy = serialized.clone();
         data.cache.insert(prefix, serialized).await;
         Ok(HttpResponse::Ok()
-            .set_header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-            .set_header(header::CACHE_CONTROL, "public, max-age=604800")
+            .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
+            .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
             .body(serialized_copy))
     };
 }
@@ -193,17 +198,17 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
 
     let config = crate::config::Config::from_env().unwrap();
-    let pool = config.pg.create_pool(NoTls).unwrap();
+    let pool = config.pg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
     let cache = CacheBuilder::new(15_000)
         .time_to_live(Duration::from_secs(6 * 60 * 60))
         .build();
 
     HttpServer::new(move || {
         App::new()
-            .data(AutocompleteState {
+            .app_data(Data::new(AutocompleteState {
                 pool: pool.clone(),
                 cache: cache.clone(),
-            })
+            }))
             .service(autocomplete)
     })
     .bind(config.server_addr.clone())?
