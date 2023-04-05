@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  autocompleted:
+    restart: always
+    network_mode: host
+    command: /app/autocompleted
+    build: .
+    environment:
+      SERVER_ADDR: ${SERVER_ADDR}
+      PG__USER: ${PG__USER}
+      PG__PASSWORD: ${PG__PASSWORD}
+      PG__HOST: ${PG__HOST}
+      PG__PORT: ${PG__PORT}
+      PG__DBNAME: ${PG__DBNAME}
+      PG__POOL__MAX_SIZE: ${PG__POOL__MAX_SIZE}
