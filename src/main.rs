@@ -162,7 +162,7 @@ async fn autocomplete(
     return if cached.is_some() {
         Ok(HttpResponse::Ok()
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
-            .insert_header((header::CACHE_CONTROL, "public; max-age=604800"))
+            .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
             .body(cached.unwrap()))
     } else {
         let client = match data.pool.get().await {
