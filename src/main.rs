@@ -2,6 +2,7 @@ use actix_web::{
     error, get,
     http::header,
     http::StatusCode,
+    middleware::DefaultHeaders,
     web::{self, Data},
     HttpResponse, HttpResponseBuilder,
 };
@@ -205,6 +206,11 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(
+                DefaultHeaders::new()
+                    .add((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+                    .add((header::ACCESS_CONTROL_ALLOW_HEADERS, "Authorization")),
+            )
             .app_data(Data::new(AutocompleteState {
                 pool: pool.clone(),
                 cache: cache.clone(),
