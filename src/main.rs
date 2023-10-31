@@ -159,7 +159,7 @@ async fn autocomplete(
     req: web::Query<Req>,
 ) -> Result<HttpResponse, AutocompleteError> {
     let prefix: String = validate_transform_tag(req.tag_prefix.as_str())?;
-    let cached = data.cache.get(&prefix);
+    let cached = data.cache.get(&prefix).await;
     return if cached.is_some() {
         Ok(HttpResponse::Ok()
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
