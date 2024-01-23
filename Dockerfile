@@ -1,4 +1,4 @@
-FROM rust:1.73-alpine3.18 as builder
+FROM rust:1.75-alpine3.19 as builder
 
 WORKDIR /app
 
@@ -8,6 +8,6 @@ COPY . .
 
 RUN cargo build --release
 
-FROM alpine:3.18
+FROM alpine:3.19
 
 COPY --from=builder /app/target/release/autocompleted /app/autocompleted
