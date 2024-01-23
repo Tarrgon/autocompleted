@@ -138,7 +138,7 @@ fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
         .nfc()
         .collect::<String>()
         .to_lowercase()
-        .replace(['*', '%'], "")
+        .replace(['*', '%', '\0'], "")
         .chars()
         .filter(|x| !x.is_whitespace())
         .collect();
