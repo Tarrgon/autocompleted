@@ -13,7 +13,6 @@ use moka::future::Cache;
 use serde::Deserialize;
 
 mod config {
-    pub use ::config::ConfigError;
     use serde::Deserialize;
 
     #[derive(Deserialize)]
@@ -53,11 +52,11 @@ mod db {
 
     use crate::models::Tag;
 
-    fn escape_like(stuff: &String) -> String {
+    fn escape_like(stuff: &str) -> String {
         stuff
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-            .replace("*", "%")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+            .replace('*', "%")
             .replace("\\*", "*")
     }
 
@@ -67,21 +66,21 @@ mod db {
     ) -> Result<Vec<Tag>, tokio_postgres::Error> {
         let escape_prefix = escape_like(&(tag_prefix.to_owned() + "*"));
         let _stmt = "set statement_timeout = 3000";
-        let stmt = client.prepare(&_stmt).await?;
+        let stmt = client.prepare(_stmt).await?;
         client.execute(&stmt, &[]).await?;
         let _stmt = include_str!("../sql/fetch_tags_a.sql");
-        let stmt = client.prepare(&_stmt).await?;
+        let stmt = client.prepare(_stmt).await?;
         let rows = client
             .query(&stmt, &[&escape_prefix])
             .await?
             .iter()
             .map(|row| Tag::from_row_ref(row).unwrap())
             .collect::<Vec<Tag>>();
-        if rows.len() > 0 {
+        if !rows.is_empty() {
             return Ok(rows);
         }
         let _stmt = include_str!("../sql/fetch_tags_b.sql");
-        let stmt = client.prepare(&_stmt).await?;
+        let stmt = client.prepare(_stmt).await?;
         let rows = client
             .query(&stmt, &[&tag_prefix])
             .await?
@@ -139,8 +138,7 @@ fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
         .nfc()
         .collect::<String>()
         .to_lowercase()
-        .replace("*", "")
-        .replace("%", "")
+        .replace(['*', '%'], "")
         .chars()
         .filter(|x| !x.is_whitespace())
         .collect();
@@ -160,11 +158,11 @@ async fn autocomplete(
 ) -> Result<HttpResponse, AutocompleteError> {
     let prefix: String = validate_transform_tag(req.tag_prefix.as_str())?;
     let cached = data.cache.get(&prefix).await;
-    return if cached.is_some() {
+    return if let Some(cached_json) = cached {
         Ok(HttpResponse::Ok()
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
-            .body(cached.unwrap()))
+            .body(cached_json))
     } else {
         let client = match data.pool.get().await {
             Ok(x) => x,
