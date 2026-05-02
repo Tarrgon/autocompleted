@@ -1,19 +1,18 @@
-name: Docker Build
+name: 3. Publish
 
 on:
   push:
-    branches:
-    - master
+    tags:
+      - '*'
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  docker-build:
+  publish:
     runs-on: ubuntu-latest
-    if: github.repository_owner == 'e621ng'
 
     steps:
-      - name: Publish to ghcr
+      - name: Publish to GHCR
         uses: e621ng/publish-to-ghcr@v1
