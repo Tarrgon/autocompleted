@@ -158,7 +158,7 @@ async fn autocomplete(
 ) -> Result<HttpResponse, AutocompleteError> {
     let prefix: String = validate_transform_tag(req.tag_prefix.as_str())?;
     let cached = data.cache.get(&prefix).await;
-    return if let Some(cached_json) = cached {
+    if let Some(cached_json) = cached {
         Ok(HttpResponse::Ok()
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
@@ -167,14 +167,14 @@ async fn autocomplete(
         let client = match data.pool.get().await {
             Ok(x) => x,
             Err(x) => {
-                error!("{}", x.to_string());
+                error!("{}", x);
                 return Err(AutocompleteError::ServerError);
             }
         };
         let results = match db::get_tags(&client, &prefix).await {
             Ok(x) => x,
             Err(x) => {
-                error!("{}", x.to_string());
+                error!("{}", x);
                 return Err(AutocompleteError::ServerError);
             }
         };
@@ -185,7 +185,7 @@ async fn autocomplete(
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
             .body(serialized_copy))
-    };
+    }
 }
 
 #[actix_web::main]
