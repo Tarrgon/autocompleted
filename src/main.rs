@@ -65,11 +65,9 @@ mod db {
         tag_prefix: &String,
     ) -> Result<Vec<Tag>, tokio_postgres::Error> {
         let escape_prefix = escape_like(&(tag_prefix.to_owned() + "*"));
-        let _stmt = "set statement_timeout = 3000";
-        let stmt = client.prepare(_stmt).await?;
-        client.execute(&stmt, &[]).await?;
-        let _stmt = include_str!("../sql/fetch_tags_a.sql");
-        let stmt = client.prepare(_stmt).await?;
+        let stmt = client
+            .prepare_cached(include_str!("../sql/fetch_tags_a.sql"))
+            .await?;
         let rows = client
             .query(&stmt, &[&escape_prefix])
             .await?
@@ -79,8 +77,9 @@ mod db {
         if !rows.is_empty() {
             return Ok(rows);
         }
-        let _stmt = include_str!("../sql/fetch_tags_b.sql");
-        let stmt = client.prepare(_stmt).await?;
+        let stmt = client
+            .prepare_cached(include_str!("../sql/fetch_tags_b.sql"))
+            .await?;
         let rows = client
             .query(&stmt, &[&tag_prefix])
             .await?
@@ -197,8 +196,12 @@ async fn main() -> std::io::Result<()> {
     use tokio_postgres::NoTls;
     env_logger::init();
 
-    let config =
+    let mut config =
         crate::config::Config::from_env().expect("Failed to load configuration from environment");
+    config.pg.options = Some(match config.pg.options.as_deref() {
+        Some(existing) => format!("{existing} -c statement_timeout=3000"),
+        None => "-c statement_timeout=3000".to_owned(),
+    });
     let pool = config
         .pg
         .create_pool(Some(Runtime::Tokio1), NoTls)
