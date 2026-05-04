@@ -128,13 +128,10 @@ impl error::ResponseError for AutocompleteError {
 
 fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
     use unicode_normalization::UnicodeNormalization;
-    if tag.len() > 100 {
+    if tag.chars().take(101).count() > 100 {
         return Err(AutocompleteError::BadRequest);
     }
-    if tag.len() < 3 {
-        return Err(AutocompleteError::BadRequest);
-    }
-    let tag_str = tag
+    let tag_str: String = tag
         .nfc()
         .collect::<String>()
         .to_lowercase()
@@ -142,6 +139,10 @@ fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
         .chars()
         .filter(|x| !x.is_whitespace())
         .collect();
+    let len = tag_str.chars().count();
+    if !(3..=100).contains(&len) {
+        return Err(AutocompleteError::BadRequest);
+    }
     Ok(tag_str)
 }
 
