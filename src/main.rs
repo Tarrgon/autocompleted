@@ -65,11 +65,9 @@ mod db {
         tag_prefix: &String,
     ) -> Result<Vec<Tag>, tokio_postgres::Error> {
         let escape_prefix = escape_like(&(tag_prefix.to_owned() + "*"));
-        let _stmt = "set statement_timeout = 3000";
-        let stmt = client.prepare(_stmt).await?;
-        client.execute(&stmt, &[]).await?;
-        let _stmt = include_str!("../sql/fetch_tags_a.sql");
-        let stmt = client.prepare(_stmt).await?;
+        let stmt = client
+            .prepare_cached(include_str!("../sql/fetch_tags_a.sql"))
+            .await?;
         let rows = client
             .query(&stmt, &[&escape_prefix])
             .await?
@@ -79,8 +77,9 @@ mod db {
         if !rows.is_empty() {
             return Ok(rows);
         }
-        let _stmt = include_str!("../sql/fetch_tags_b.sql");
-        let stmt = client.prepare(_stmt).await?;
+        let stmt = client
+            .prepare_cached(include_str!("../sql/fetch_tags_b.sql"))
+            .await?;
         let rows = client
             .query(&stmt, &[&tag_prefix])
             .await?
@@ -128,13 +127,10 @@ impl error::ResponseError for AutocompleteError {
 
 fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
     use unicode_normalization::UnicodeNormalization;
-    if tag.len() > 100 {
+    if tag.chars().take(101).count() > 100 {
         return Err(AutocompleteError::BadRequest);
     }
-    if tag.len() < 3 {
-        return Err(AutocompleteError::BadRequest);
-    }
-    let tag_str = tag
+    let tag_str: String = tag
         .nfc()
         .collect::<String>()
         .to_lowercase()
@@ -142,6 +138,10 @@ fn validate_transform_tag(tag: &str) -> Result<String, AutocompleteError> {
         .chars()
         .filter(|x| !x.is_whitespace())
         .collect();
+    let len = tag_str.chars().count();
+    if !(3..=100).contains(&len) {
+        return Err(AutocompleteError::BadRequest);
+    }
     Ok(tag_str)
 }
 
@@ -158,7 +158,7 @@ async fn autocomplete(
 ) -> Result<HttpResponse, AutocompleteError> {
     let prefix: String = validate_transform_tag(req.tag_prefix.as_str())?;
     let cached = data.cache.get(&prefix).await;
-    return if let Some(cached_json) = cached {
+    if let Some(cached_json) = cached {
         Ok(HttpResponse::Ok()
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
@@ -167,14 +167,14 @@ async fn autocomplete(
         let client = match data.pool.get().await {
             Ok(x) => x,
             Err(x) => {
-                error!("{}", x.to_string());
+                error!("{}", x);
                 return Err(AutocompleteError::ServerError);
             }
         };
         let results = match db::get_tags(&client, &prefix).await {
             Ok(x) => x,
             Err(x) => {
-                error!("{}", x.to_string());
+                error!("{}", x);
                 return Err(AutocompleteError::ServerError);
             }
         };
@@ -185,7 +185,7 @@ async fn autocomplete(
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "public, max-age=604800"))
             .body(serialized_copy))
-    };
+    }
 }
 
 #[actix_web::main]
@@ -196,8 +196,16 @@ async fn main() -> std::io::Result<()> {
     use tokio_postgres::NoTls;
     env_logger::init();
 
-    let config = crate::config::Config::from_env().unwrap();
-    let pool = config.pg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+    let mut config =
+        crate::config::Config::from_env().expect("Failed to load configuration from environment");
+    config.pg.options = Some(match config.pg.options.as_deref() {
+        Some(existing) => format!("{existing} -c statement_timeout=3000"),
+        None => "-c statement_timeout=3000".to_owned(),
+    });
+    let pool = config
+        .pg
+        .create_pool(Some(Runtime::Tokio1), NoTls)
+        .expect("Failed to create PostgreSQL connection pool");
     let cache = CacheBuilder::new(15_000)
         .time_to_live(Duration::from_secs(6 * 60 * 60))
         .build();
