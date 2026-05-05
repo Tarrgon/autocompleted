@@ -29,4 +29,6 @@ jobs:
         with:
           push: true
           cache-from: type=gha
-          tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
